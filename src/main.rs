@@ -2,7 +2,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::{env, io};
 
-use inquire::{Password, Select};
+use inquire::{Confirm, Password, Select, Text};
 use kdbx_rs::{binary::Unlocked, database::Group, CompositeKey, Kdbx};
 
 type Database = Kdbx<Unlocked>;
@@ -43,14 +43,22 @@ fn open_database<P: AsRef<Path>>(file_path: P, secret: String) -> Result<Databas
 fn handle_database(database: Database) {
     print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
     println!("Database '{}'", &database.name());
-    handle_group(database.root());
+    while handle_group(database.root()) != GroupExitAction::Quit {}
 }
 
 const SELECT_A_GROUP: &str = "Select a group";
 const SELECT_AN_ENTRY: &str = "Select an entry";
+const SEARCH_AN_ENTRY: &str = "Search an entry";
 const BACK_TO_PREVIOUS: &str = "Back to previous";
+const QUIT: &str = "Quit";
 
-fn handle_group(group: &Group) {
+#[derive(PartialEq)]
+enum GroupExitAction {
+    Quit,
+    BackToParent,
+}
+
+fn handle_group(group: &Group) -> GroupExitAction {
     loop {
         let entity_count = group.entries().size_hint().0;
         let group_count = group.groups().size_hint().0;
@@ -65,7 +73,9 @@ fn handle_group(group: &Group) {
         if entity_count > 0 {
             options.push(SELECT_AN_ENTRY);
         }
+        options.push(SEARCH_AN_ENTRY);
         options.push(BACK_TO_PREVIOUS);
+        options.push(QUIT);
 
         let ans = Select::new("Next action?", options).prompt().unwrap();
         match ans {
@@ -75,7 +85,9 @@ fn handle_group(group: &Group) {
                 let selected_group = group
                     .find_group(|g| g.name() == selected_group_name)
                     .unwrap();
-                handle_group(selected_group);
+                if handle_group(selected_group) == GroupExitAction::Quit {
+                    return GroupExitAction::Quit;
+                }
             }
             SELECT_AN_ENTRY => {
                 let entries = group
@@ -97,11 +109,41 @@ fn handle_group(group: &Group) {
                     selected_entry.password().unwrap_or_default()
                 );
 
-                println!("\nPress any key to continue...");
-                let mut stdin = io::stdin();
-                let _ = stdin.read(&mut [0u8]).unwrap();
+                press_key();
             }
-            _ => break,
+            SEARCH_AN_ENTRY => {
+                let search_term = Text::new("Search term: ").prompt().unwrap();
+                let search_term = search_term.to_ascii_lowercase();
+                group.recursive_entries().for_each(|entry| {
+                    if entry
+                        .title()
+                        .unwrap_or_default()
+                        .to_ascii_lowercase()
+                        .contains(&search_term)
+                    {
+                        println!("\ntitle: {}", entry.title().unwrap_or_default());
+                        println!("- username: {}", entry.username().unwrap_or_default());
+                        println!("- password: {}", entry.password().unwrap_or_default());
+                    }
+                });
+                press_key();
+            }
+            QUIT => {
+                let confirmation = Confirm::new("Do you want to quit?")
+                    .with_default(false)
+                    .prompt()
+                    .unwrap();
+                if confirmation {
+                    return GroupExitAction::Quit;
+                }
+            }
+            _ => return GroupExitAction::BackToParent,
         }
     }
+}
+
+fn press_key() {
+    println!("\nPress any key to continue...");
+    let mut stdin = io::stdin();
+    let _ = stdin.read(&mut [0u8]).unwrap();
 }
