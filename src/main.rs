@@ -81,12 +81,13 @@ fn handle_group(group: &Group) -> GroupExitAction {
         match ans {
             SELECT_A_GROUP => {
                 let groups = group.groups().map(|g| g.name()).collect::<Vec<_>>();
-                let selected_group_name = Select::new("\nSelect a group", groups).prompt().unwrap();
-                let selected_group = group
-                    .find_group(|g| g.name() == selected_group_name)
-                    .unwrap();
-                if handle_group(selected_group) == GroupExitAction::Quit {
-                    return GroupExitAction::Quit;
+                if let Ok(selected_group_name) = Select::new("\nSelect a group", groups).prompt() {
+                    let selected_group = group
+                        .find_group(|g| g.name() == selected_group_name)
+                        .unwrap();
+                    if handle_group(selected_group) == GroupExitAction::Quit {
+                        return GroupExitAction::Quit;
+                    }
                 }
             }
             SELECT_AN_ENTRY => {
@@ -94,47 +95,52 @@ fn handle_group(group: &Group) -> GroupExitAction {
                     .entries()
                     .map(|e| e.title().unwrap_or_default())
                     .collect::<Vec<_>>();
-                let selected_entry_name =
-                    Select::new("\nSelect an entry", entries).prompt().unwrap();
-                let selected_entry = group
-                    .find_entry(|e| e.title().unwrap_or_default() == selected_entry_name)
-                    .unwrap();
-                println!("- title: {}", selected_entry.title().unwrap_or_default());
-                println!(
-                    "- username: {}",
-                    selected_entry.username().unwrap_or_default()
-                );
-                println!(
-                    "- password: {}",
-                    selected_entry.password().unwrap_or_default()
-                );
+                if let Ok(selected_entry_name) = Select::new("\nSelect an entry", entries).prompt()
+                {
+                    if let Some(selected_entry) =
+                        group.find_entry(|e| e.title().unwrap_or_default() == selected_entry_name)
+                    {
+                        println!("- title: {}", selected_entry.title().unwrap_or_default());
+                        println!(
+                            "- username: {}",
+                            selected_entry.username().unwrap_or_default()
+                        );
+                        println!(
+                            "- password: {}",
+                            selected_entry.password().unwrap_or_default()
+                        );
 
-                press_key();
+                        press_key();
+                    }
+                }
             }
             SEARCH_AN_ENTRY => {
-                let search_term = Text::new("Search term: ").prompt().unwrap();
-                let search_term = search_term.to_ascii_lowercase();
-                group.recursive_entries().for_each(|entry| {
-                    if entry
-                        .title()
-                        .unwrap_or_default()
-                        .to_ascii_lowercase()
-                        .contains(&search_term)
-                    {
-                        println!("\ntitle: {}", entry.title().unwrap_or_default());
-                        println!("- username: {}", entry.username().unwrap_or_default());
-                        println!("- password: {}", entry.password().unwrap_or_default());
-                    }
-                });
-                press_key();
+                if let Ok(search_term) = Text::new("Search term: ").prompt() {
+                    let search_term = search_term.to_ascii_lowercase();
+                    group.recursive_entries().for_each(|entry| {
+                        if entry
+                            .title()
+                            .unwrap_or_default()
+                            .to_ascii_lowercase()
+                            .contains(&search_term)
+                        {
+                            println!("\ntitle     : {}", entry.title().unwrap_or_default());
+                            println!("- username: {}", entry.username().unwrap_or_default());
+                            println!("- password: {}", entry.password().unwrap_or_default());
+                            println!("- url     : {}", entry.url().unwrap_or_default());
+                        }
+                    });
+                    press_key();
+                }
             }
             QUIT => {
-                let confirmation = Confirm::new("Do you want to quit?")
+                if let Ok(confirmation) = Confirm::new("Do you want to quit?")
                     .with_default(false)
                     .prompt()
-                    .unwrap();
-                if confirmation {
-                    return GroupExitAction::Quit;
+                {
+                    if confirmation {
+                        return GroupExitAction::Quit;
+                    }
                 }
             }
             _ => return GroupExitAction::BackToParent,
