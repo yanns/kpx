@@ -15,16 +15,28 @@ fn main() {
         return;
     }
     let database_path = &args[1];
-    let secret = Password::new("Encryption Key:")
+    loop {
+        let secret = Password::new(&format!(
+            "Encryption Key for database '{}':",
+            &database_path
+        ))
         .without_confirmation()
         .prompt();
-    match secret {
-        Ok(secret) => {
-            let database = open_database(database_path, secret).unwrap();
-            handle_database(database);
-        }
-        Err(e) => {
-            println!("Error: {}", e);
+        match secret {
+            Err(e) => {
+                println!("Error: {}", e);
+                break;
+            }
+            Ok(secret) => match open_database(database_path, secret) {
+                Ok(database) => {
+                    handle_database(database);
+                    break;
+                }
+                Err(e) => {
+                    println!("Error: {}", e);
+                    continue;
+                }
+            },
         }
     }
 }
